@@ -31,7 +31,7 @@ variable "key_name" {
 variable "repo_url" {
   description = "GitHub repository URL to clone the project"
   type        = string
-  default     = "https://github.com/YOUR_USER/YOUR_REPO.git"
+  default     = "https://github.com/izqsebas-sys/proyecto-cloud.git"
 }
 
 variable "db_password" {
