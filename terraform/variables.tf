@@ -1,13 +1,13 @@
 variable "vpc_id" {
   description = "VPC ID for the project"
   type        = string
-  default     = "vpc-0db51e24b1be9bc68"
+  default     = "vpc-055b57b4906f95f03"
 }
 
 variable "subnet_id" {
   description = "Subnet ID for EC2 instances"
   type        = string
-  default     = "subnet-0a279d9c60a8ef4e0"
+  default     = "subnet-09ae42c851723e9d3"
 }
 
 variable "ami_id" {
@@ -25,7 +25,7 @@ variable "instance_type" {
 variable "key_name" {
   description = "EC2 key pair name"
   type        = string
-  default     = "callanor2026_02_iot"
+  default     = "vockey"
 }
 
 variable "repo_url" {
