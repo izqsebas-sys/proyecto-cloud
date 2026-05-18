@@ -24,7 +24,7 @@ def get_ssm_parameter(name: str, retries: int = 15, delay: int = 15) -> str:
             return response["Parameter"]["Value"]
         except Exception as e:
             if attempt < retries - 1:
-                logger.warning(f"SSM param {name} not ready, retrying in {delay}s... ({e})")
+                logger.warning(f"Parámetro SSM {name} no disponible, reintentando en {delay}s... ({e})")
                 time.sleep(delay)
             else:
                 raise
@@ -68,10 +68,10 @@ def update_task_status(task_id: str, status: str) -> None:
         )
         conn.commit()
         cur.close()
-        logger.info(f"Task {task_id} updated to status={status}")
+        logger.info(f"Tarea {task_id} actualizada a estado={status}")
     except Exception as e:
         conn.rollback()
-        logger.error(f"Failed to update task {task_id}: {e}")
+        logger.error(f"Error al actualizar tarea {task_id}: {e}")
         raise
     finally:
         conn.close()
@@ -83,7 +83,7 @@ def handle_create(ch, method, properties, body):
         task_id = message["task_id"]
         payload = message["payload"]
 
-        logger.info(f"Processing create for task_id={task_id}")
+        logger.info(f"Procesando creación para task_id={task_id}")
 
         order_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
@@ -97,19 +97,19 @@ def handle_create(ch, method, properties, body):
             )
             conn.commit()
             cur.close()
-            logger.info(f"Order {order_id} created for task_id={task_id}")
+            logger.info(f"Pedido {order_id} creado para task_id={task_id}")
         except Exception as e:
             conn.rollback()
-            logger.error(f"Failed to create order: {e}")
+            logger.error(f"Error al crear pedido: {e}")
             raise
         finally:
             conn.close()
 
-        update_task_status(task_id, "completed")
+        update_task_status(task_id, "completado")
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
     except Exception as e:
-        logger.error(f"Error processing create message: {e}")
+        logger.error(f"Error procesando mensaje de creación: {e}")
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 
@@ -119,7 +119,7 @@ def handle_delete(ch, method, properties, body):
         task_id = message["task_id"]
         order_id = message["order_id"]
 
-        logger.info(f"Processing delete for order_id={order_id}, task_id={task_id}")
+        logger.info(f"Procesando eliminación para pedido_id={order_id}, task_id={task_id}")
 
         conn = get_db_connection()
         try:
@@ -127,19 +127,19 @@ def handle_delete(ch, method, properties, body):
             cur.execute("DELETE FROM orders WHERE order_id = %s", (order_id,))
             conn.commit()
             cur.close()
-            logger.info(f"Order {order_id} deleted")
+            logger.info(f"Pedido {order_id} eliminado")
         except Exception as e:
             conn.rollback()
-            logger.error(f"Failed to delete order {order_id}: {e}")
+            logger.error(f"Error al eliminar pedido {order_id}: {e}")
             raise
         finally:
             conn.close()
 
-        update_task_status(task_id, "completed")
+        update_task_status(task_id, "completado")
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
     except Exception as e:
-        logger.error(f"Error processing delete message: {e}")
+        logger.error(f"Error procesando mensaje de eliminación: {e}")
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 
@@ -157,17 +157,17 @@ def consume_queue(queue: str, callback, rabbitmq_host: str) -> None:
             channel.queue_declare(queue=queue, durable=True)
             channel.basic_qos(prefetch_count=1)
             channel.basic_consume(queue=queue, on_message_callback=callback)
-            logger.info(f"Started consuming from queue: {queue}")
+            logger.info(f"Consumiendo cola: {queue}")
             channel.start_consuming()
         except Exception as e:
-            logger.error(f"Worker for queue {queue} failed: {e}. Reconnecting in 10s...")
+            logger.error(f"Worker para cola {queue} falló: {e}. Reconectando en 10s...")
             time.sleep(10)
 
 
 def main():
-    logger.info("Worker starting up...")
+    logger.info("Iniciando worker...")
     rabbitmq_host = get_rabbitmq_host()
-    logger.info(f"RabbitMQ host: {rabbitmq_host}")
+    logger.info(f"Host RabbitMQ: {rabbitmq_host}")
 
     create_thread = threading.Thread(
         target=consume_queue,
@@ -183,7 +183,7 @@ def main():
     create_thread.start()
     delete_thread.start()
 
-    logger.info("Worker threads started. Waiting for messages...")
+    logger.info("Hilos del worker iniciados. Esperando mensajes...")
     create_thread.join()
     delete_thread.join()
 

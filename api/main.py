@@ -16,10 +16,17 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 app = FastAPI(
-    title="Async Orders API",
-    description="Asynchronous order processing API with RabbitMQ and PostgreSQL",
+    title="API de Pedidos Asíncronos",
+    description="API de procesamiento asíncrono de pedidos con RabbitMQ y PostgreSQL",
     version="1.0.0",
 )
+
+
+def _validar_uuid(valor: str, nombre: str = "ID") -> None:
+    try:
+        uuid.UUID(valor)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"{nombre} no encontrado")
 
 _config_cache: dict = {}
 
@@ -32,7 +39,7 @@ def get_ssm_parameter(name: str, retries: int = 10, delay: int = 15) -> str:
             return response["Parameter"]["Value"]
         except Exception as e:
             if attempt < retries - 1:
-                logger.warning(f"SSM param {name} not ready, retrying in {delay}s... ({e})")
+                logger.warning(f"Parámetro SSM {name} no disponible, reintentando en {delay}s... ({e})")
                 time.sleep(delay)
             else:
                 raise
@@ -106,7 +113,7 @@ class OrderUpdate(BaseModel):
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    return {"estado": "saludable"}
 
 
 @app.post("/orders", status_code=202)
@@ -119,29 +126,30 @@ def create_order(order: OrderCreate):
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO tasks (task_id, status, created_at, updated_at) VALUES (%s, %s, %s, %s)",
-            (task_id, "pending", now, now),
+            (task_id, "pendiente", now, now),
         )
         conn.commit()
         cur.close()
     except Exception as e:
         conn.rollback()
-        logger.error(f"DB error creating task: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create task")
+        logger.error(f"Error de BD al crear tarea: {e}")
+        raise HTTPException(status_code=500, detail="Error al crear la tarea")
     finally:
         conn.close()
 
     try:
         publish_message("orders_create", {"task_id": task_id, "payload": order.model_dump()})
     except Exception as e:
-        logger.error(f"RabbitMQ error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to queue order")
+        logger.error(f"Error de RabbitMQ: {e}")
+        raise HTTPException(status_code=500, detail="Error al encolar el pedido")
 
-    logger.info(f"Order queued with task_id={task_id}")
-    return {"task_id": task_id, "status": "pending"}
+    logger.info(f"Pedido encolado con task_id={task_id}")
+    return {"task_id": task_id, "estado": "pendiente"}
 
 
 @app.get("/tasks/{task_id}")
 def get_task(task_id: str):
+    _validar_uuid(task_id, "Tarea")
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -152,19 +160,19 @@ def get_task(task_id: str):
         row = cur.fetchone()
         cur.close()
     except Exception as e:
-        logger.error(f"DB error fetching task: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch task")
+        logger.error(f"Error de BD al obtener tarea: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener la tarea")
     finally:
         conn.close()
 
     if not row:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
 
     return {
         "task_id": str(row[0]),
-        "status": row[1],
-        "created_at": str(row[2]),
-        "updated_at": str(row[3]),
+        "estado": row[1],
+        "creado_en": str(row[2]),
+        "actualizado_en": str(row[3]),
     }
 
 
@@ -179,17 +187,17 @@ def get_orders():
         rows = cur.fetchall()
         cur.close()
     except Exception as e:
-        logger.error(f"DB error fetching orders: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch orders")
+        logger.error(f"Error de BD al obtener pedidos: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener los pedidos")
     finally:
         conn.close()
 
     return [
         {
-            "order_id": str(r[0]),
+            "pedido_id": str(r[0]),
             "task_id": str(r[1]),
-            "payload": r[2],
-            "created_at": str(r[3]),
+            "datos": r[2],
+            "creado_en": str(r[3]),
         }
         for r in rows
     ]
@@ -197,13 +205,14 @@ def get_orders():
 
 @app.put("/orders/{order_id}")
 def update_order(order_id: str, order: OrderUpdate):
+    _validar_uuid(order_id, "Pedido")
     conn = get_db_connection()
     try:
         cur = conn.cursor()
         cur.execute("SELECT order_id FROM orders WHERE order_id = %s", (order_id,))
         if not cur.fetchone():
             cur.close()
-            raise HTTPException(status_code=404, detail="Order not found")
+            raise HTTPException(status_code=404, detail="Pedido no encontrado")
 
         updates = {k: v for k, v in order.model_dump().items() if v is not None}
         if updates:
@@ -217,30 +226,31 @@ def update_order(order_id: str, order: OrderUpdate):
         raise
     except Exception as e:
         conn.rollback()
-        logger.error(f"DB error updating order: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update order")
+        logger.error(f"Error de BD al actualizar pedido: {e}")
+        raise HTTPException(status_code=500, detail="Error al actualizar el pedido")
     finally:
         conn.close()
 
-    logger.info(f"Order {order_id} updated synchronously")
-    return {"order_id": order_id, "status": "updated"}
+    logger.info(f"Pedido {order_id} actualizado de forma síncrona")
+    return {"pedido_id": order_id, "estado": "actualizado"}
 
 
 @app.delete("/orders/{order_id}", status_code=202)
 def delete_order(order_id: str):
+    _validar_uuid(order_id, "Pedido")
     conn = get_db_connection()
     try:
         cur = conn.cursor()
         cur.execute("SELECT order_id FROM orders WHERE order_id = %s", (order_id,))
         if not cur.fetchone():
             cur.close()
-            raise HTTPException(status_code=404, detail="Order not found")
+            raise HTTPException(status_code=404, detail="Pedido no encontrado")
         cur.close()
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"DB error checking order: {e}")
-        raise HTTPException(status_code=500, detail="Failed to check order")
+        logger.error(f"Error de BD al verificar pedido: {e}")
+        raise HTTPException(status_code=500, detail="Error al verificar el pedido")
     finally:
         conn.close()
 
@@ -252,22 +262,22 @@ def delete_order(order_id: str):
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO tasks (task_id, status, created_at, updated_at) VALUES (%s, %s, %s, %s)",
-            (task_id, "pending", now, now),
+            (task_id, "pendiente", now, now),
         )
         conn.commit()
         cur.close()
     except Exception as e:
         conn.rollback()
-        logger.error(f"DB error creating delete task: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create task")
+        logger.error(f"Error de BD al crear tarea de eliminación: {e}")
+        raise HTTPException(status_code=500, detail="Error al crear la tarea")
     finally:
         conn.close()
 
     try:
         publish_message("orders_delete", {"task_id": task_id, "order_id": order_id})
     except Exception as e:
-        logger.error(f"RabbitMQ error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to queue delete")
+        logger.error(f"Error de RabbitMQ: {e}")
+        raise HTTPException(status_code=500, detail="Error al encolar la eliminación")
 
-    logger.info(f"Delete queued for order={order_id}, task_id={task_id}")
-    return {"task_id": task_id, "status": "pending"}
+    logger.info(f"Eliminación encolada para pedido={order_id}, task_id={task_id}")
+    return {"task_id": task_id, "estado": "pendiente"}
