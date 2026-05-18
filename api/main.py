@@ -22,11 +22,11 @@ app = FastAPI(
 )
 
 
-def _validar_uuid(valor: str, nombre: str = "ID") -> None:
+def _validar_uuid(valor: str, mensaje_404: str = "Recurso no encontrado") -> None:
     try:
         uuid.UUID(valor)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"{nombre} no encontrado")
+        raise HTTPException(status_code=404, detail=mensaje_404)
 
 _config_cache: dict = {}
 
@@ -149,7 +149,7 @@ def create_order(order: OrderCreate):
 
 @app.get("/tasks/{task_id}")
 def get_task(task_id: str):
-    _validar_uuid(task_id, "Tarea")
+    _validar_uuid(task_id, "Tarea no encontrada")
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -205,7 +205,7 @@ def get_orders():
 
 @app.put("/orders/{order_id}")
 def update_order(order_id: str, order: OrderUpdate):
-    _validar_uuid(order_id, "Pedido")
+    _validar_uuid(order_id, "Pedido no encontrado")
     conn = get_db_connection()
     try:
         cur = conn.cursor()
@@ -237,7 +237,7 @@ def update_order(order_id: str, order: OrderUpdate):
 
 @app.delete("/orders/{order_id}", status_code=202)
 def delete_order(order_id: str):
-    _validar_uuid(order_id, "Pedido")
+    _validar_uuid(order_id, "Pedido no encontrado")
     conn = get_db_connection()
     try:
         cur = conn.cursor()

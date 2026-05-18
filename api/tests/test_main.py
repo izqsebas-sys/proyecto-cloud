@@ -124,6 +124,12 @@ def test_get_task_not_found():
     assert response.json()["detail"] == "Tarea no encontrada"
 
 
+def test_get_task_invalid_uuid_message():
+    response = client.get(f"/tasks/{INVALID_ID}")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Tarea no encontrada"
+
+
 def test_get_task_invalid_uuid_returns_404():
     response = client.get(f"/tasks/{INVALID_ID}")
     assert response.status_code == 404
